@@ -1,61 +1,101 @@
 # cmemutils
 
-cmemutils — simple, focused Python utilities for working with process memory and offsets.  
-Created by **advantagewtf** to provide small, reusable helpers for educational, research, and development purposes.
+`cmemutils` is a small Python library for process discovery, memory access, and
+offset handling. It is intended for debugging software you own or are
+authorized to inspect.
 
----
+> **responsible use only.** Do not use this project to violate laws, service
+> terms, or other people's privacy. Memory access can crash a process or damage
+> its data. The authors are not responsible for misuse or resulting penalties.
 
-> ⚠️ **IMPORTANT — Responsible use only**  
-> This project is intended **for educational and research purposes only** (learning about OS internals, debugging, testing tools you own, reverse-engineering for interoperability, etc.).  
-> **Do not** use this code to break terms of service, cheat in multiplayer games, or otherwise violate laws or rules. The author and maintainers are **not** responsible for bans, account suspensions, or other penalties resulting from misuse.
+## utilities
 
----
+- List processes or find one by executable name or top-level window title.
+- Open and automatically close process handles.
+- Read and write bytes, integers, and floating-point values.
+- Follow pointer chains using explicit offsets and target pointer size.
+- Query, allocate, and free memory in the **current process**.
+- Load and save offset maps in JSON or CSV format.
+- Resolve a base address plus a signed offset.
 
-# Table of contents
-- Overview
-- Features
-- Requirements
-- Installation
-- Quick start
-- API
-- Examples
-- Testing
-- Contributing
-- Roadmap
-- License
-- Support & Contact
-- Disclaimer
+This release does **not** provide module enumeration or remote-process
+allocation. `alloc()` only allocates in the current process.
 
----
+## platform and Python support
 
-# Overview
-`cmemutils` is a small collection of Python helpers that make common memory- and offset-related tasks easier:
-- process discovery and lightweight process handles
-- reading/writing primitive values and blobs
-- helpers for dealing with module bases and offsets
-- utilities for parsing and converting offset files (JSON / CSV)
+- Python 3.9 or newer.
+- Process-memory and window-title APIs require Windows. Importing `cmemutils`
+  is safe on other platforms; calling a Windows-only operation there raises a
+  clear `OSError`.
+- Process listing and name lookup use `psutil`, installed automatically with
+  the package. Process access may still be denied by Windows permissions or
+  security software.
 
-The aim is clarity and portability — each utility is simple and documented so it can be composed into larger debugging or tooling workflows.
+## installation
 
----
+From a checkout:
 
-# Features
-- Enumerate running processes and modules
-- Open a process handle (cross-platform considerations documented)
-- Read and write bytes and primitives (ints, floats) through a simple API
-- Resolve module base address and compute absolute addresses from offsets
-- Load/save offset maps (JSON) and provide convenience conversion helpers
-- Small, dependency-light footprint
+```console
+python -m pip install .
+```
 
----
+For development and tests:
 
-# Requirements
-- Python 3.9+ recommended
-- Platform-specific dependencies may be required for low-level process access (see **Platform notes** below)
-- No heavy external frameworks required for the core helpers
+```console
+python -m pip install -e ".[test]"
+python -m pytest
+```
 
-**Platform notes**
-- Some operations (open process, read/write memory) require elevated privileges on modern OSes and/or platform-specific APIs. See the documentation for platform behavior and examples.
+## quick start
 
----
+This example reads and then changes a buffer owned by the current Python
+process. It avoids relying on another process or a hard-coded address:
 
+```python
+import ctypes
+import os
+
+from cmemutils import mem_utils
+
+memory = mem_utils()
+buffer = ctypes.create_string_buffer(b"hello")
+address = ctypes.addressof(buffer)
+
+with memory.opened_process(os.getpid()) as process:
+    print(memory.rpm(process, address, 5))  # b"hello"
+    memory.wpm(process, address, b"HELLO")
+
+print(buffer.raw[:5])  # b"HELLO"
+```
+
+Only use process-memory operations on processes you own or are authorized to
+debug. Allocations default to non-executable read/write pages. Requesting
+`PAGE_EXECUTE_READWRITE` should be an explicit, carefully considered choice.
+
+## offset files
+
+JSON and CSV offset maps use names mapped to integer values. Hex strings are
+accepted when loading either format:
+
+```json
+{
+  "player_base": "0x1234",
+  "health": 32
+}
+```
+
+```python
+from cmemutils import load_offsets, save_offsets
+
+offsets = load_offsets("offsets.json")
+save_offsets("offsets.csv", offsets)
+```
+
+## testing
+
+The unit suite uses fake API objects for deterministic memory and process
+behavior, so it can run without Windows. GitHub Actions also runs the suite on
+Windows and Linux across several supported Python versions.
+
+See [`docs.md`](docs.md) for the complete API and examples. See
+[`LICENSE`](LICENSE) for the license terms.
